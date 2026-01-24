@@ -265,35 +265,7 @@ pcm_advplus_patch/
 3. Kiểm tra ví bị trừ tiền
 4. PUT `/api/bookings/{id}/cancel` → Test refund
 
----
 
-## 💯 ĐÁNH GIÁ THEO ĐỀ BÀI
-
-| Tiêu chí | Điểm tối đa | Dự kiến | Ghi chú |
-|----------|-------------|---------|---------|
-| 1. Kiến trúc & Code Quality | 30% | **30%** | ✅ Hoàn hảo |
-| 2. Nghiệp vụ Chuyên sâu | 30% | **30%** | ✅ Đầy đủ |
-| 3. Công nghệ Nâng cao | 30% | **25%** | 📝 SignalR/Hangfire cần thêm |
-| 4. UI/UX & Hoàn thiện | 10% | **8%** | ✅ Tốt |
-| **TỔNG ĐIỂM** | **100%** | **93%** | **Xếp loại: A+ (9.3/10)** |
-
----
-
-## 🚀 ROADMAP HOÀN THIỆN 100%
-
-Để đạt **100 điểm**, cần thêm:
-
-- [ ] SignalR Hubs (2h)
-  - BookingHub - Real-time booking
-  - MatchHub - Live scores
-- [ ] Hangfire Jobs (1h)
-  - Auto-cancel pending bookings
-  - Daily reports
-- [ ] Frontend polish (3h)
-  - Booking calendar UI
-  - Tournament bracket visualization
-
-**Tổng thời gian: ~6 giờ**
 
 ---
 
@@ -320,8 +292,8 @@ dotnet ef migrations add InitialCreate --project Infrastructure --startup-projec
 
 ## 👨‍💻 TÁC GIẢ
 
-- **Sinh viên**: [Tên của bạn]
-- **MSSV**: [XXX]
+- **Sinh viên**: [Đinh Trọng Quỳnh]
+- **MSSV**: [020]
 - **Lớp**: Fullstack Development
 - **Năm**: 2026
 
@@ -399,6 +371,3 @@ Bạn có thể copy và chỉnh router/store theo project.
 - 2–3 matches
 
 ---
-
-Nếu bạn muốn mình “fit” patch vào đúng repo hiện tại của bạn (đặt đúng namespace, đúng service names),
-bạn chỉ cần paste cấu trúc folder hiện tại (backend) hoặc upload zip source của bạn.
