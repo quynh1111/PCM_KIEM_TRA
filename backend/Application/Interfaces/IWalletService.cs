@@ -8,6 +8,7 @@ namespace PCM.Application.Interfaces
     {
         Task<WalletTransactionDto> CreateDepositRequestAsync(string userId, WalletDepositRequestDto dto);
         Task<WalletTransactionDto> ApproveDepositAsync(int transactionId, bool approved, string? note = null);
+        Task<List<WalletTransactionDto>> GetPendingDepositsAsync();
         Task<List<WalletTransactionDto>> GetTransactionHistoryAsync(string userId);
         Task<decimal> GetBalanceAsync(string userId);
         

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -12,9 +13,12 @@ namespace PCM.Infrastructure.Services
     public class MemberService : IMemberService
     {
         private readonly IUnitOfWork _unitOfWork;
-        public MemberService(IUnitOfWork unitOfWork)
+        private readonly ICacheService _cacheService;
+
+        public MemberService(IUnitOfWork unitOfWork, ICacheService cacheService)
         {
             _unitOfWork = unitOfWork;
+            _cacheService = cacheService;
         }
 
         public async Task<MemberDto?> GetByIdAsync(int id)
@@ -43,11 +47,25 @@ namespace PCM.Infrastructure.Services
 
         public async Task<List<MemberDto>> GetTopRankingAsync(int count = 5)
         {
+            var cacheKey = $"leaderboard:top:{count}";
+            var cached = await _cacheService.GetAsync<List<MemberDto>>(cacheKey);
+            if (cached != null && cached.Any())
+                return cached;
+
             var members = (await _unitOfWork.Members.GetAllAsync())
+                .Where(m => m.IsActive)
                 .OrderByDescending(m => m.RankELO)
                 .Take(count)
                 .Select(ToDto)
                 .ToList();
+
+            await _cacheService.SetAsync(cacheKey, members, TimeSpan.FromMinutes(5));
+
+            foreach (var member in members)
+            {
+                await _cacheService.AddToSortedSetAsync("leaderboard:elo", member.FullName, member.RankELO);
+            }
+
             return members;
         }
 
@@ -57,6 +75,9 @@ namespace PCM.Infrastructure.Services
             if (member == null) return false;
             member.RankELO = newELO;
             await _unitOfWork.SaveChangesAsync();
+
+            await _cacheService.RemoveAsync("leaderboard:top:5");
+            await _cacheService.AddToSortedSetAsync("leaderboard:elo", member.FullName, newELO);
             return true;
         }
 

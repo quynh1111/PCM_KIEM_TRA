@@ -10,7 +10,7 @@ namespace PCM.API.Controllers
 {
     [ApiController]
     [Route("api/transactions")]
-    [Authorize]
+    [Authorize(Roles = "Admin,Treasurer")]
     public class TransactionsController : ControllerBase
     {
         private readonly ITreasuryService _treasury;

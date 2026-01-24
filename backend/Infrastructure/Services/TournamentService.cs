@@ -68,6 +68,30 @@ namespace PCM.Infrastructure.Services
             return MapToDto(tournament, 0);
         }
 
+        public async Task<TournamentDto?> UpdateTournamentAsync(int id, CreateTournamentDto dto)
+        {
+            var tournament = await _unitOfWork.Tournaments.GetByIdAsync(id);
+            if (tournament == null)
+                return null;
+
+            tournament.Name = dto.Name;
+            tournament.Description = dto.Description;
+            tournament.StartDate = dto.StartDate;
+            tournament.EndDate = dto.EndDate;
+            tournament.Type = dto.Type;
+            tournament.Format = dto.Format;
+            tournament.EntryFee = dto.EntryFee;
+            tournament.PrizePool = dto.PrizePool;
+            tournament.MaxParticipants = dto.MaxParticipants;
+            tournament.RegistrationDeadline = dto.RegistrationDeadline;
+
+            _unitOfWork.Tournaments.Update(tournament);
+            await _unitOfWork.SaveChangesAsync();
+
+            var count = (await _unitOfWork.Participants.FindAsync(p => p.TournamentId == id)).Count();
+            return MapToDto(tournament, count);
+        }
+
         public async Task<bool> JoinTournamentAsync(int tournamentId, string userId, string? teamName = null)
         {
             var tournament = await _unitOfWork.Tournaments.GetByIdAsync(tournamentId);
@@ -211,41 +235,178 @@ namespace PCM.Infrastructure.Services
                 .ThenBy(p => p.RegisteredDate)
                 .ToList();
 
-            if (participants.Count < 2 || participants.Count % 2 != 0)
+            if (participants.Count < 2)
                 return false;
 
-            var round = 1;
-            var position = 1;
-            foreach (var pair in participants.Chunk(2))
+            var bracketSize = 1;
+            while (bracketSize < participants.Count)
             {
-                var match = new Match
-                {
-                    TournamentId = tournamentId,
-                    Date = DateTime.UtcNow.AddDays(1),
-                    IsRanked = false,
-                    MatchFormat = MatchFormat.Singles,
-                    Team1Player1Id = pair[0].MemberId,
-                    Team2Player1Id = pair[1].MemberId,
-                    Status = MatchStatus.Scheduled,
-                    Result = WinnerSide.None
-                };
-
-                await _unitOfWork.Matches.AddAsync(match);
-                await _unitOfWork.SaveChangesAsync();
-
-                var tournamentMatch = new TournamentMatch
-                {
-                    TournamentId = tournamentId,
-                    MatchId = match.Id,
-                    Round = round,
-                    Position = position++,
-                    BracketGroup = "WinnerBracket"
-                };
-
-                await _unitOfWork.TournamentMatches.AddAsync(tournamentMatch);
-                await _unitOfWork.SaveChangesAsync();
+                bracketSize <<= 1;
             }
 
+            var rounds = new List<List<TournamentMatch>>();
+            var totalRounds = (int)Math.Log2(bracketSize);
+            var seeded = participants.Select(p => p.MemberId).ToList();
+            while (seeded.Count < bracketSize)
+            {
+                seeded.Add(0);
+            }
+
+            for (var round = 1; round <= totalRounds; round++)
+            {
+                var matchCount = bracketSize / (int)Math.Pow(2, round);
+                var roundMatches = new List<TournamentMatch>();
+
+                for (var position = 1; position <= matchCount; position++)
+                {
+                    Match match;
+                    if (round == 1)
+                    {
+                        var pairIndex = (position - 1) * 2;
+                        var team1Id = seeded[pairIndex];
+                        var team2Id = seeded[pairIndex + 1];
+                        match = new Match
+                        {
+                            TournamentId = tournamentId,
+                            Date = DateTime.UtcNow.AddDays(1),
+                            IsRanked = false,
+                            MatchFormat = MatchFormat.Singles,
+                            Team1Player1Id = team1Id,
+                            Team2Player1Id = team2Id,
+                            Status = MatchStatus.Scheduled,
+                            Result = WinnerSide.None
+                        };
+
+                        if (team1Id == 0 && team2Id == 0)
+                        {
+                            match.Status = MatchStatus.Completed;
+                        }
+                        else if (team1Id == 0 || team2Id == 0)
+                        {
+                            match.Status = MatchStatus.Completed;
+                            match.Result = team1Id == 0 ? WinnerSide.Team2 : WinnerSide.Team1;
+                            match.ScoreTeam1 = team1Id == 0 ? 0 : 1;
+                            match.ScoreTeam2 = team2Id == 0 ? 0 : 1;
+                        }
+                    }
+                    else
+                    {
+                        match = new Match
+                        {
+                            TournamentId = tournamentId,
+                            Date = DateTime.UtcNow.AddDays(round),
+                            IsRanked = false,
+                            MatchFormat = MatchFormat.Singles,
+                            Team1Player1Id = 0,
+                            Team2Player1Id = 0,
+                            Status = MatchStatus.Scheduled,
+                            Result = WinnerSide.None
+                        };
+                    }
+
+                    await _unitOfWork.Matches.AddAsync(match);
+                    await _unitOfWork.SaveChangesAsync();
+
+                    var tournamentMatch = new TournamentMatch
+                    {
+                        TournamentId = tournamentId,
+                        MatchId = match.Id,
+                        Round = round,
+                        Position = position,
+                        BracketGroup = "WinnerBracket"
+                    };
+
+                    await _unitOfWork.TournamentMatches.AddAsync(tournamentMatch);
+                    await _unitOfWork.SaveChangesAsync();
+                    roundMatches.Add(tournamentMatch);
+                }
+
+                rounds.Add(roundMatches);
+            }
+
+            for (var roundIndex = 0; roundIndex < rounds.Count - 1; roundIndex++)
+            {
+                var currentRound = rounds[roundIndex];
+                var nextRound = rounds[roundIndex + 1];
+
+                for (var i = 0; i < currentRound.Count; i++)
+                {
+                    var next = nextRound[i / 2];
+                    currentRound[i].NextMatchId = next.Id;
+                    _unitOfWork.TournamentMatches.Update(currentRound[i]);
+                }
+            }
+
+            if (rounds.Count > 1)
+            {
+                var firstRound = rounds[0];
+                foreach (var tm in firstRound)
+                {
+                    var match = await _unitOfWork.Matches.GetByIdAsync(tm.MatchId);
+                    if (match == null || match.Status != MatchStatus.Completed)
+                        continue;
+
+                    if (!tm.NextMatchId.HasValue)
+                        continue;
+
+                    var nextTournamentMatch = await _unitOfWork.TournamentMatches.GetByIdAsync(tm.NextMatchId.Value);
+                    if (nextTournamentMatch == null)
+                        continue;
+
+                    var nextMatch = await _unitOfWork.Matches.GetByIdAsync(nextTournamentMatch.MatchId);
+                    if (nextMatch == null)
+                        continue;
+
+                    var team1Winner = match.Result == WinnerSide.Team1;
+                    var winner1 = team1Winner ? match.Team1Player1Id : match.Team2Player1Id;
+                    var winner2 = team1Winner ? match.Team1Player2Id : match.Team2Player2Id;
+
+                    if (winner1 == 0)
+                        continue;
+
+                    if (tm.Position % 2 == 1)
+                    {
+                        nextMatch.Team1Player1Id = winner1;
+                        nextMatch.Team1Player2Id = winner2;
+                    }
+                    else
+                    {
+                        nextMatch.Team2Player1Id = winner1;
+                        nextMatch.Team2Player2Id = winner2;
+                    }
+
+                    _unitOfWork.Matches.Update(nextMatch);
+                }
+            }
+
+            tournament.Status = TournamentStatus.Ongoing;
+            _unitOfWork.Tournaments.Update(tournament);
+            await _unitOfWork.SaveChangesAsync();
+
+            return true;
+        }
+
+        public async Task<bool> AutoDivideTeamsAsync(int tournamentId)
+        {
+            var participants = (await _unitOfWork.Participants.FindAsync(p => p.TournamentId == tournamentId)).ToList();
+            if (!participants.Any())
+                return false;
+
+            var members = await _unitOfWork.Members.GetAllAsync();
+            var rankMap = members.ToDictionary(m => m.Id, m => m.RankELO);
+
+            var ordered = participants
+                .OrderByDescending(p => rankMap.TryGetValue(p.MemberId, out var elo) ? elo : 0)
+                .ThenBy(p => p.RegisteredDate)
+                .ToList();
+
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                ordered[i].TeamName = i % 2 == 0 ? "Team A" : "Team B";
+                _unitOfWork.Participants.Update(ordered[i]);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
             return true;
         }
 

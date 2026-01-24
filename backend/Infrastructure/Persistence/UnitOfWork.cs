@@ -10,6 +10,7 @@ namespace PCM.Infrastructure.Persistence
     {
         private readonly PCMDbContext _context;
         private IDbContextTransaction? _transaction;
+        private int _transactionDepth;
 
         private IRepository<Member>? _members;
         private IRepository<RefreshToken>? _refreshTokens;
@@ -72,15 +73,24 @@ namespace PCM.Infrastructure.Persistence
 
         public async Task BeginTransactionAsync()
         {
-            _transaction = await _context.Database.BeginTransactionAsync();
+            if (_transactionDepth == 0)
+            {
+                _transaction = await _context.Database.BeginTransactionAsync();
+            }
+            _transactionDepth++;
         }
 
         public async Task CommitTransactionAsync()
         {
+            if (_transactionDepth == 0)
+                return;
+
             try
             {
                 await SaveChangesAsync();
-                if (_transaction != null)
+
+                _transactionDepth--;
+                if (_transactionDepth == 0 && _transaction != null)
                 {
                     await _transaction.CommitAsync();
                 }
@@ -92,7 +102,7 @@ namespace PCM.Infrastructure.Persistence
             }
             finally
             {
-                if (_transaction != null)
+                if (_transactionDepth == 0 && _transaction != null)
                 {
                     await _transaction.DisposeAsync();
                     _transaction = null;
@@ -108,6 +118,7 @@ namespace PCM.Infrastructure.Persistence
                 await _transaction.DisposeAsync();
                 _transaction = null;
             }
+            _transactionDepth = 0;
         }
 
         public void Dispose()

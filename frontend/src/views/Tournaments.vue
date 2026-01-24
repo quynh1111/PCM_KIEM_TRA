@@ -18,6 +18,14 @@
             <div style="display:flex; gap:10px; margin-top:10px;">
               <button class="btn btn-primary" @click="joinTournament(t.id)" :disabled="loading">Đăng ký</button>
               <button class="btn btn-ghost" @click="loadBracket(t.id)">Xem bracket</button>
+              <button
+                v-if="canManage"
+                class="btn btn-secondary"
+                @click="generateBracket(t.id)"
+                :disabled="adminLoading"
+              >
+                Tạo bracket
+              </button>
             </div>
           </div>
         </div>
@@ -51,11 +59,17 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { tournamentsApi } from "@/api/tournaments";
+import { useAuthStore } from "@/stores/auth";
 
 const tournaments = ref([]);
 const bracket = ref(null);
 const loading = ref(false);
+const adminLoading = ref(false);
 const error = ref("");
+const authStore = useAuthStore();
+const canManage = computed(
+  () => authStore.hasRole("Admin") || authStore.hasRole("Treasurer")
+);
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(value || 0);
@@ -94,6 +108,19 @@ const loadBracket = async (id) => {
     bracket.value = await tournamentsApi.bracket(id);
   } catch (err) {
     error.value = "Không tải được bracket.";
+  }
+};
+
+const generateBracket = async (id) => {
+  adminLoading.value = true;
+  error.value = "";
+  try {
+    await tournamentsApi.generateBracket(id);
+    await loadBracket(id);
+  } catch (err) {
+    error.value = err?.response?.data?.message || "Tạo bracket thất bại.";
+  } finally {
+    adminLoading.value = false;
   }
 };
 

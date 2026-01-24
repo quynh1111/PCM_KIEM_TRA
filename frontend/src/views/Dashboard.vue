@@ -49,6 +49,17 @@
         </div>
       </div>
     </section>
+
+    <section class="card reveal">
+      <div class="card-title">Thông báo ghim</div>
+      <div v-if="pinnedNews.length" class="grid">
+        <div v-for="item in pinnedNews" :key="item.id" class="stat-card">
+          <div class="stat-label">{{ item.title }}</div>
+          <div class="muted">{{ item.content }}</div>
+        </div>
+      </div>
+      <div v-else class="muted">Chưa có thông báo.</div>
+    </section>
   </div>
 </template>
 
@@ -56,13 +67,18 @@
 import { computed, onMounted, ref } from "vue";
 import { treasuryApi } from "../api/treasury";
 import { membersApi } from "../api/members";
+import { newsApi } from "../api/news";
 import { useAuthStore } from "../stores/auth";
 
 const sum = ref<any>(null);
 const top = ref<any[]>([]);
+const pinnedNews = ref<any[]>([]);
 const authStore = useAuthStore();
 
 const displayName = computed(() => authStore.user?.fullName || "thành viên");
+const canViewTreasury = computed(
+  () => authStore.hasRole("Admin") || authStore.hasRole("Treasurer")
+);
 
 const formatCurrency = (value?: number) => {
   if (value === null || value === undefined) return "--";
@@ -70,7 +86,14 @@ const formatCurrency = (value?: number) => {
 };
 
 onMounted(async () => {
-  sum.value = await treasuryApi.summary();
+  if (canViewTreasury.value) {
+    try {
+      sum.value = await treasuryApi.summary();
+    } catch {
+      sum.value = null;
+    }
+  }
   top.value = await membersApi.topRanking(5);
+  pinnedNews.value = await newsApi.list(true);
 });
 </script>

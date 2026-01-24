@@ -11,7 +11,7 @@ namespace PCM.API.Controllers
 {
     [ApiController]
     [Route("api/transaction-categories")]
-    [Authorize]
+    [Authorize(Roles = "Admin,Treasurer")]
     public class TransactionCategoriesController : ControllerBase
     {
         private readonly ITransactionCategoryService _svc;

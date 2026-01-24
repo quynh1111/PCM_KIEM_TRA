@@ -22,7 +22,7 @@ namespace PCM.API.Controllers.Compatibility
         // BASIC required:
         // GET /api/bookings/available-slots?courtId=&date=YYYY-MM-DD
         [HttpGet("available-slots")]
-        public async Task<IActionResult> AvailableSlots([FromQuery] int courtId, [FromQuery] DateOnly date, CancellationToken ct)
+        public async Task<IActionResult> AvailableSlots([FromQuery] int? courtId, [FromQuery] DateOnly date, CancellationToken ct)
         {
             var slots = await _booking.GetAvailableSlotsAsync(date.ToDateTime(TimeOnly.MinValue), courtId);
             return Ok(slots);

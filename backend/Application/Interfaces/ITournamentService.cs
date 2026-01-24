@@ -9,8 +9,10 @@ namespace PCM.Application.Interfaces
         Task<List<TournamentDto>> GetAllTournamentsAsync();
         Task<TournamentDto?> GetByIdAsync(int id);
         Task<TournamentDto> CreateTournamentAsync(CreateTournamentDto dto, string userId);
+        Task<TournamentDto?> UpdateTournamentAsync(int id, CreateTournamentDto dto);
         Task<bool> JoinTournamentAsync(int tournamentId, string userId, string? teamName = null);
         Task<BracketDto?> GetBracketAsync(int tournamentId);
         Task<bool> GenerateBracketAsync(int tournamentId);
+        Task<bool> AutoDivideTeamsAsync(int tournamentId);
     }
 }

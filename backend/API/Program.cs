@@ -1,4 +1,6 @@
 using System.Text;
+using Hangfire;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +9,7 @@ using PCM.Application.Interfaces;
 using PCM.Domain.Interfaces;
 using PCM.Infrastructure.Persistence;
 using PCM.Infrastructure.Services;
+using PCM.Infrastructure.Jobs;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,6 +29,7 @@ var redisConnection = builder.Configuration.GetConnectionString("Redis");
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 {
     var config = ConfigurationOptions.Parse(redisConnection ?? "localhost:6379");
+    config.AbortOnConnectFail = false;
     return ConnectionMultiplexer.Connect(config);
 });
 
@@ -49,9 +53,13 @@ builder.Services.AddScoped<IWalletService, WalletService>();
 builder.Services.AddScoped<ITreasuryService, TreasuryService>();
 builder.Services.AddScoped<ITransactionCategoryService, TransactionCategoryService>();
 builder.Services.AddScoped<ITournamentService, TournamentService>();
+builder.Services.AddScoped<IMatchService, MatchService>();
+builder.Services.AddScoped<INewsService, NewsService>();
 builder.Services.AddScoped<IEloRatingService, EloRatingService>();
 builder.Services.AddScoped<ICacheService, RedisCacheService>();
 builder.Services.AddScoped<DataSeeder>();
+builder.Services.AddScoped<BookingCleanupJob>();
+builder.Services.AddScoped<DailyReportJob>();
 
 // Add DI
 builder.Services.AddScoped<IUnitOfWork>(sp => 
@@ -86,6 +94,23 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+
+builder.Services.AddSignalR();
+
+// Hangfire
+builder.Services.AddHangfire(config =>
+{
+    config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UseSqlServerStorage(connectionString, new SqlServerStorageOptions
+        {
+            CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+            SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+            QueuePollInterval = TimeSpan.FromSeconds(15)
+        });
+});
+builder.Services.AddHangfireServer();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -130,6 +155,20 @@ app.UseSwaggerUI(c =>
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHangfireDashboard("/hangfire");
 app.MapControllers();
+app.MapHub<PCM.API.Hubs.BookingHub>("/hubs/bookings");
+app.MapHub<PCM.API.Hubs.MatchHub>("/hubs/matches");
+app.MapHub<PCM.API.Hubs.NotificationHub>("/hubs/notifications");
+
+RecurringJob.AddOrUpdate<BookingCleanupJob>(
+    "cancel-pending-bookings",
+    job => job.ExecuteAsync(),
+    "*/5 * * * *");
+
+RecurringJob.AddOrUpdate<DailyReportJob>(
+    "daily-report",
+    job => job.ExecuteAsync(),
+    "0 23 * * *");
 
 app.Run();

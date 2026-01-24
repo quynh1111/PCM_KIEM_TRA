@@ -49,7 +49,7 @@ namespace PCM.API.Controllers
         }
 
         [HttpPost("{id:int}/join")]
-        public async Task<IActionResult> Join(int id, [FromBody] JoinTournamentDto dto)
+        public async Task<IActionResult> Join(int id, [FromBody] JoinTournamentDto? dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(userId))

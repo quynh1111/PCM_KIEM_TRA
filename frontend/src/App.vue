@@ -31,7 +31,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterView, RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -40,6 +40,12 @@ const router = useRouter()
 const authStore = useAuthStore()
 const isAuth = computed(() => route.meta.layout === 'auth')
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+
+onMounted(async () => {
+  if (authStore.isAuthenticated && !authStore.user) {
+    await authStore.fetchUserProfile()
+  }
+})
 
 const logout = async () => {
   await authStore.logout()

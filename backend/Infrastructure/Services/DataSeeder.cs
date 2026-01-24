@@ -31,7 +31,7 @@ namespace PCM.Infrastructure.Services
             await EnsureRoleAsync("Member");
 
             var adminMember = await EnsureUserAsync(
-                email: "admin@pcm.local",
+                email: "admin@pcm.vn",
                 password: "Admin@123",
                 fullName: "Administrator",
                 phoneNumber: "0900000000",
@@ -84,6 +84,7 @@ namespace PCM.Infrastructure.Services
             await EnsureWalletTransactionsAsync(member2, categoryMap, includePending: true);
             await EnsureBookingsAsync(new[] { member1, member2 });
             await EnsureTournamentsAsync(adminMember, new[] { member1, member2 });
+            await EnsureNewsAsync(adminMember);
         }
 
         private async Task EnsureRoleAsync(string name)
@@ -405,6 +406,36 @@ namespace PCM.Infrastructure.Services
                 await _unitOfWork.Participants.AddAsync(participant);
             }
 
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        private async Task EnsureNewsAsync(Member adminMember)
+        {
+            var existing = await _unitOfWork.News.GetAllAsync();
+            if (existing.Any())
+                return;
+
+            var items = new[]
+            {
+                new News
+                {
+                    Title = "Lịch nghỉ Tết",
+                    Content = "CLB nghỉ từ 28/01 đến 02/02. Hẹn gặp lại các thành viên!",
+                    IsPinned = true,
+                    CreatedBy = adminMember.UserId,
+                    CreatedDate = DateTime.UtcNow.AddDays(-2)
+                },
+                new News
+                {
+                    Title = "Vinh danh top ELO",
+                    Content = "Chúc mừng thành viên có thứ hạng ELO cao nhất tháng này.",
+                    IsPinned = false,
+                    CreatedBy = adminMember.UserId,
+                    CreatedDate = DateTime.UtcNow.AddDays(-1)
+                }
+            };
+
+            await _unitOfWork.News.AddRangeAsync(items);
             await _unitOfWork.SaveChangesAsync();
         }
 

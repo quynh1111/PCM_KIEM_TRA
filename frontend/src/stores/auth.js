@@ -6,8 +6,33 @@ export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref(localStorage.getItem('accessToken') || null)
   const refreshToken = ref(localStorage.getItem('refreshToken') || null)
   const user = ref(null)
+  const roles = ref([])
 
   const isAuthenticated = computed(() => !!accessToken.value)
+
+  const parseRoles = (token) => {
+    if (!token) return []
+    try {
+      const payload = token.split('.')[1]
+      const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+      const decoded = JSON.parse(atob(padded))
+      const claim = decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']
+      if (!claim) return []
+      return Array.isArray(claim) ? claim : [claim]
+    } catch (error) {
+      console.error('Role parse error:', error)
+      return []
+    }
+  }
+
+  const setRolesFromToken = (token) => {
+    roles.value = parseRoles(token)
+  }
+
+  if (accessToken.value) {
+    setRolesFromToken(accessToken.value)
+  }
 
   async function login(email, password) {
     try {
@@ -16,6 +41,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       accessToken.value = token
       refreshToken.value = refresh
+      setRolesFromToken(token)
       
       localStorage.setItem('accessToken', token)
       localStorage.setItem('refreshToken', refresh)
@@ -36,6 +62,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       accessToken.value = token
       refreshToken.value = refresh
+      setRolesFromToken(token)
       
       localStorage.setItem('accessToken', token)
       localStorage.setItem('refreshToken', refresh)
@@ -58,6 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
       accessToken.value = null
       refreshToken.value = null
       user.value = null
+      roles.value = []
       
       localStorage.clear()
     }
@@ -76,10 +104,12 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken,
     refreshToken,
     user,
+    roles,
     isAuthenticated,
     login,
     register,
     logout,
-    fetchUserProfile
+    fetchUserProfile,
+    hasRole: (role) => roles.value.includes(role)
   }
 })

@@ -23,6 +23,9 @@ namespace PCM.Infrastructure.Services
 
         public async Task<WalletTransactionDto> CreateDepositRequestAsync(string userId, WalletDepositRequestDto dto)
         {
+            if (dto.Amount <= 0)
+                throw new Exception("Deposit amount must be greater than 0");
+
             var member = await _unitOfWork.Members.FirstOrDefaultAsync(m => m.UserId == userId);
             if (member == null)
                 throw new Exception("Member not found");
@@ -60,6 +63,8 @@ namespace PCM.Infrastructure.Services
 
                 if (transaction.Status != WalletTransactionStatus.Pending)
                     throw new Exception("Transaction already processed");
+                if (transaction.Type != WalletTransactionType.Deposit)
+                    throw new Exception("Only deposit transactions can be approved");
 
                 var member = await _unitOfWork.Members.GetByIdAsync(transaction.MemberId);
                 if (member == null)
@@ -98,6 +103,31 @@ namespace PCM.Infrastructure.Services
                 await _unitOfWork.RollbackTransactionAsync();
                 throw;
             }
+        }
+
+        public async Task<List<WalletTransactionDto>> GetPendingDepositsAsync()
+        {
+            var pending = await _unitOfWork.WalletTransactions.FindAsync(t =>
+                t.Status == WalletTransactionStatus.Pending &&
+                t.Type == WalletTransactionType.Deposit);
+
+            if (!pending.Any())
+                return new List<WalletTransactionDto>();
+
+            var members = await _unitOfWork.Members.GetAllAsync();
+            var memberMap = members.ToDictionary(m => m.Id, m => m);
+            var categories = await _unitOfWork.TransactionCategories.GetAllAsync();
+            var categoryMap = categories.ToDictionary(c => c.Id, c => c);
+
+            return pending
+                .OrderByDescending(t => t.Date)
+                .Select(t =>
+                {
+                    memberMap.TryGetValue(t.MemberId, out var member);
+                    categoryMap.TryGetValue(t.CategoryId, out var category);
+                    return MapToDto(t, member!, category);
+                })
+                .ToList();
         }
 
         public async Task<List<WalletTransactionDto>> GetTransactionHistoryAsync(string userId)

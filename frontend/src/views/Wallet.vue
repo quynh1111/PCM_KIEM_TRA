@@ -55,18 +55,55 @@
         </tbody>
       </table>
     </section>
+
+    <section v-if="canApprove" class="card reveal">
+      <div class="card-title">Duyệt nạp tiền</div>
+      <div v-if="pendingLoading" class="muted">Đang tải danh sách...</div>
+      <div v-else-if="!pendingDeposits.length" class="muted">Không có yêu cầu đang chờ.</div>
+      <table v-else class="table">
+        <thead>
+          <tr>
+            <th>Thành viên</th>
+            <th>Số tiền</th>
+            <th>Minh chứng</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in pendingDeposits" :key="item.id">
+            <td>{{ item.memberName }}</td>
+            <td>{{ formatCurrency(item.amount) }}</td>
+            <td>
+              <a v-if="item.proofImageUrl" :href="item.proofImageUrl" target="_blank" rel="noreferrer">Xem ảnh</a>
+              <span v-else class="muted">Không có</span>
+            </td>
+            <td style="display:flex; gap:8px;">
+              <button class="btn btn-primary" @click="approveDeposit(item.id, true)" :disabled="pendingLoading">Duyệt</button>
+              <button class="btn btn-ghost" @click="approveDeposit(item.id, false)" :disabled="pendingLoading">Từ chối</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { walletApi } from "@/api/wallet";
+import { useAuthStore } from "@/stores/auth";
 
 const balance = ref(null);
 const transactions = ref([]);
 const depositLoading = ref(false);
 const walletError = ref("");
 const depositResult = ref(null);
+const pendingDeposits = ref([]);
+const pendingLoading = ref(false);
+const authStore = useAuthStore();
+const canApprove = computed(
+  () => authStore.hasRole("Admin") || authStore.hasRole("Treasurer")
+);
 
 const deposit = ref({
   amount: 100000,
@@ -101,7 +138,38 @@ const submitDeposit = async () => {
   }
 };
 
+const loadPendingDeposits = async () => {
+  if (!canApprove.value) return;
+  pendingLoading.value = true;
+  try {
+    pendingDeposits.value = await walletApi.pending();
+  } catch (err) {
+    walletError.value = "Không tải được danh sách chờ duyệt.";
+  } finally {
+    pendingLoading.value = false;
+  }
+};
+
+const approveDeposit = async (transactionId, approved) => {
+  pendingLoading.value = true;
+  walletError.value = "";
+  try {
+    await walletApi.approve({ transactionId, approved });
+    await loadPendingDeposits();
+    await loadWallet();
+  } catch (err) {
+    walletError.value = err?.response?.data?.message || "Duyệt nạp tiền thất bại.";
+  } finally {
+    pendingLoading.value = false;
+  }
+};
+
 onMounted(async () => {
   await loadWallet();
+  await loadPendingDeposits();
+});
+
+watch(canApprove, async (value) => {
+  if (value) await loadPendingDeposits();
 });
 </script>
