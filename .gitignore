@@ -1,0 +1,41 @@
+## Backend
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.log
+appsettings.Development.json
+
+# Migrations (optional - uncomment if you want to ignore)
+# backend/Infrastructure/Migrations/
+
+## Frontend
+
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+## Docker
+
+# Volumes
+sqlserver_data/
+redis_data/
+
+## Misc
+*.orig
+.vs/
