@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -96,6 +97,21 @@ namespace PCM.API.Controllers
 
             await _authService.RevokeTokenAsync(userId);
             return NoContent();
+        }
+
+        [HttpGet("me")]
+        [Authorize]
+        public IActionResult Me()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var email = User.FindFirstValue(ClaimTypes.Email);
+            var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+            return Ok(new
+            {
+                userId,
+                email,
+                roles
+            });
         }
     }
 }

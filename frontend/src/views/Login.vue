@@ -2,7 +2,7 @@
   <div class="auth-shell">
     <section class="auth-panel">
       <div>
-        <span class="tag">PCM Pro Access</span>
+        <span class="tag">Truy cập PCM Pro</span>
         <h1 class="section-title">Chào mừng trở lại</h1>
         <p class="section-subtitle">Đăng nhập để quản lý lịch đặt sân, ví điện tử và bảng xếp hạng thời gian thực.</p>
       </div>
@@ -37,7 +37,7 @@
       </form>
     </section>
     <aside class="auth-aside">
-      <span class="auth-chip">Realtime Booking</span>
+      <span class="auth-chip">Đặt sân realtime</span>
       <h2>Vợt Thủ Phố Núi</h2>
       <p>Hệ thống quản lý CLB Pickleball với booking thông minh, ví điện tử và tournament bracket chuyên nghiệp.</p>
     </aside>
@@ -61,7 +61,7 @@ async function handleLogin() {
   try {
     loading.value = true
     error.value = ''
-    
+
     await authStore.login(email.value, password.value)
     router.push('/dashboard')
   } catch (err) {

@@ -33,6 +33,25 @@ namespace PCM.API.Controllers
             return Ok(member);
         }
 
+        [HttpGet]
+        [Authorize(Roles = "Admin,Treasurer")]
+        public async Task<IActionResult> GetAll()
+        {
+            var data = await _memberService.GetAllAsync();
+            return Ok(data);
+        }
+
+        [HttpGet("{id:int}")]
+        [Authorize(Roles = "Admin,Treasurer")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var data = await _memberService.GetByIdAsync(id);
+            if (data == null)
+                return NotFound();
+
+            return Ok(data);
+        }
+
         [HttpPut("profile")]
         public async Task<IActionResult> UpdateProfile([FromBody] UpdateMemberProfileDto dto)
         {
@@ -41,6 +60,17 @@ namespace PCM.API.Controllers
                 return Unauthorized();
 
             var updated = await _memberService.UpdateProfileAsync(userId, dto);
+            if (updated == null)
+                return NotFound();
+
+            return Ok(updated);
+        }
+
+        [HttpPut("{id:int}")]
+        [Authorize(Roles = "Admin,Treasurer")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateMemberProfileDto dto)
+        {
+            var updated = await _memberService.UpdateMemberAsync(id, dto);
             if (updated == null)
                 return NotFound();
 

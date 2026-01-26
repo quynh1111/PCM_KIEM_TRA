@@ -2,6 +2,7 @@ import { http } from "./http";
 
 export const tournamentsApi = {
   list: async () => (await http.get("/api/tournaments")).data,
+  create: async (payload: any) => (await http.post("/api/tournaments", payload)).data,
   join: async (id: number, teamName?: string) =>
     (await http.post(`/api/tournaments/${id}/join`, { tournamentId: id, teamName })).data,
   bracket: async (id: number) => (await http.get(`/api/tournaments/${id}/bracket`)).data,

@@ -1,3 +1,4 @@
+using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -55,8 +56,15 @@ namespace PCM.API.Controllers
             if (string.IsNullOrWhiteSpace(userId))
                 return Unauthorized();
 
-            var ok = await _tournamentService.JoinTournamentAsync(id, userId, dto?.TeamName);
-            return Ok(new { joined = ok });
+            try
+            {
+                var ok = await _tournamentService.JoinTournamentAsync(id, userId, dto?.TeamName);
+                return Ok(new { joined = ok });
+            }
+            catch (Exception ex)
+            {
+                return MapTournamentError(ex);
+            }
         }
 
         [HttpGet("{id:int}/bracket")]
@@ -73,8 +81,43 @@ namespace PCM.API.Controllers
         [Authorize(Roles = "Admin,Treasurer")]
         public async Task<IActionResult> GenerateBracket(int id)
         {
-            var ok = await _tournamentService.GenerateBracketAsync(id);
-            return Ok(new { generated = ok });
+            try
+            {
+                var ok = await _tournamentService.GenerateBracketAsync(id);
+                if (!ok)
+                    return BadRequest(new { message = "Not enough participants to generate bracket" });
+
+                return Ok(new { generated = ok });
+            }
+            catch (Exception ex)
+            {
+                return MapTournamentError(ex);
+            }
+        }
+
+        private IActionResult MapTournamentError(Exception ex)
+        {
+            var message = ex.Message ?? "Tournament error";
+            if (message.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("không tìm thấy", StringComparison.OrdinalIgnoreCase))
+                return NotFound(new { message });
+
+            if (message.Contains("already", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("đã đăng ký", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message });
+
+            if (message.Contains("full", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("closed", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("not open", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("chưa mở", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("hết hạn", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message });
+
+            if (message.Contains("insufficient", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("không đủ", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message });
+
+            return BadRequest(new { message });
         }
     }
 }

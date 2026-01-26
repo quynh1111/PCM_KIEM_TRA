@@ -2,7 +2,7 @@
   <div class="auth-shell">
     <section class="auth-panel">
       <div>
-        <span class="tag">PCM Membership</span>
+        <span class="tag">Thành viên PCM</span>
         <h1 class="section-title">Gia nhập CLB</h1>
         <p class="section-subtitle">Tạo hồ sơ số, theo dõi ranking và ví điện tử ngay khi hoàn tất đăng ký.</p>
       </div>
@@ -37,14 +37,14 @@
       </form>
     </section>
     <aside class="auth-aside">
-      <span class="auth-chip">Secure Identity</span>
+      <span class="auth-chip">Tài khoản bảo mật</span>
       <h2>Hồ sơ số &amp; ví nội bộ</h2>
       <p>Hệ thống tự động cập nhật ELO, kiểm soát ví không âm và thông báo realtime.</p>
       <div class="card">
         <div class="card-title">Quyền lợi</div>
-        <p class="muted">• Book sân linh hoạt</p>
-        <p class="muted">• Theo dõi lịch sử ví</p>
-        <p class="muted">• Tham gia giải đấu</p>
+        <p class="muted">- Đặt sân linh hoạt</p>
+        <p class="muted">- Theo dõi lịch sử ví</p>
+        <p class="muted">- Tham gia giải đấu</p>
       </div>
     </aside>
   </div>
@@ -74,7 +74,7 @@ async function handleRegister() {
   try {
     loading.value = true
     error.value = ''
-    
+
     await authStore.register(form.value)
     router.push('/dashboard')
   } catch (err) {

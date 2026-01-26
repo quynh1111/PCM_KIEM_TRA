@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -15,7 +16,11 @@ using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -49,6 +54,7 @@ builder.Services.AddIdentity<Microsoft.AspNetCore.Identity.IdentityUser, Microso
 builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddScoped<ICourtService, CourtService>();
 builder.Services.AddScoped<IWalletService, WalletService>();
 builder.Services.AddScoped<ITreasuryService, TreasuryService>();
 builder.Services.AddScoped<ITransactionCategoryService, TransactionCategoryService>();

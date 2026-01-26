@@ -27,6 +27,24 @@ const router = createRouter({
       meta: { requiresAuth: true, layout: 'app' }
     },
     {
+      path: '/treasury',
+      name: 'treasury',
+      component: () => import('@/views/Treasury.vue'),
+      meta: { requiresAuth: true, layout: 'app', roles: ['Admin', 'Treasurer'] }
+    },
+    {
+      path: '/courts',
+      name: 'courts',
+      component: () => import('@/views/Courts.vue'),
+      meta: { requiresAuth: true, layout: 'app', roles: ['Admin'] }
+    },
+    {
+      path: '/news',
+      name: 'news',
+      component: () => import('@/views/News.vue'),
+      meta: { requiresAuth: true, layout: 'app', roles: ['Admin', 'Treasurer'] }
+    },
+    {
       path: '/bookings',
       name: 'bookings',
       component: () => import('@/views/Bookings.vue'),
@@ -64,11 +82,24 @@ router.beforeEach((to, from, next) => {
   
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
-  } else if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    next('/dashboard')
-  } else {
-    next()
+    return
   }
+
+  if (to.meta.requiresGuest && authStore.isAuthenticated) {
+    next('/dashboard')
+    return
+  }
+
+  const roles = to.meta.roles
+  if (roles && roles.length) {
+    const allowed = roles.some((role) => authStore.roles.includes(role))
+    if (!allowed) {
+      next('/dashboard')
+      return
+    }
+  }
+
+  next()
 })
 
 export default router

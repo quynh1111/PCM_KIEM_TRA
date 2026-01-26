@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PCM.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using PCM.Infrastructure.Persistence;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(PCMDbContext))]
-    partial class PCMDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260124164645_AddPrefixedTables")]
+    partial class AddPrefixedTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

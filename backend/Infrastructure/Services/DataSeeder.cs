@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using PCM.Domain.Entities;
 using PCM.Domain.Enums;
 using PCM.Domain.Interfaces;
+using PCM.Application.Interfaces;
 
 namespace PCM.Infrastructure.Services
 {
@@ -16,12 +17,18 @@ namespace PCM.Infrastructure.Services
         private readonly UserManager<IdentityUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly IUnitOfWork _unitOfWork;
+        private readonly ITournamentService _tournamentService;
 
-        public DataSeeder(UserManager<IdentityUser> userManager, RoleManager<IdentityRole> roleManager, IUnitOfWork unitOfWork)
+        public DataSeeder(
+            UserManager<IdentityUser> userManager,
+            RoleManager<IdentityRole> roleManager,
+            IUnitOfWork unitOfWork,
+            ITournamentService tournamentService)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _unitOfWork = unitOfWork;
+            _tournamentService = tournamentService;
         }
 
         public async Task SeedAsync()
@@ -31,9 +38,9 @@ namespace PCM.Infrastructure.Services
             await EnsureRoleAsync("Member");
 
             var adminMember = await EnsureUserAsync(
-                email: "admin@pcm.vn",
+                email: "admin@pcm.local",
                 password: "Admin@123",
-                fullName: "Administrator",
+                fullName: "Quản trị viên",
                 phoneNumber: "0900000000",
                 role: "Admin",
                 rankElo: 1500,
@@ -42,7 +49,7 @@ namespace PCM.Infrastructure.Services
             var treasurerMember = await EnsureUserAsync(
                 email: "treasurer@pcm.local",
                 password: "Treasurer@123",
-                fullName: "Treasurer",
+                fullName: "Thủ quỹ",
                 phoneNumber: "0900000001",
                 role: "Treasurer",
                 rankElo: 1300,
@@ -51,7 +58,7 @@ namespace PCM.Infrastructure.Services
             var member1 = await EnsureUserAsync(
                 email: "member1@pcm.local",
                 password: "Member@123",
-                fullName: "Member One",
+                fullName: "Thành viên 1",
                 phoneNumber: "0900000002",
                 role: "Member",
                 rankElo: 1250,
@@ -60,11 +67,49 @@ namespace PCM.Infrastructure.Services
             var member2 = await EnsureUserAsync(
                 email: "member2@pcm.local",
                 password: "Member@123",
-                fullName: "Member Two",
+                fullName: "Thành viên 2",
                 phoneNumber: "0900000003",
                 role: "Member",
                 rankElo: 1180,
                 walletBalance: 0m);
+
+            var member3 = await EnsureUserAsync(
+                email: "member3@pcm.local",
+                password: "Member@123",
+                fullName: "Thành viên 3",
+                phoneNumber: "0900000004",
+                role: "Member",
+                rankElo: 1150,
+                walletBalance: 0m);
+
+            var member4 = await EnsureUserAsync(
+                email: "member4@pcm.local",
+                password: "Member@123",
+                fullName: "Thành viên 4",
+                phoneNumber: "0900000005",
+                role: "Member",
+                rankElo: 1120,
+                walletBalance: 0m);
+
+            var member5 = await EnsureUserAsync(
+                email: "member5@pcm.local",
+                password: "Member@123",
+                fullName: "Thành viên 5",
+                phoneNumber: "0900000006",
+                role: "Member",
+                rankElo: 1100,
+                walletBalance: 0m);
+
+            var member6 = await EnsureUserAsync(
+                email: "member6@pcm.local",
+                password: "Member@123",
+                fullName: "Thành viên 6",
+                phoneNumber: "0900000007",
+                role: "Member",
+                rankElo: 1080,
+                walletBalance: 0m);
+
+            var members = new[] { member1, member2, member3, member4, member5, member6 };
 
             await EnsureCategoryAsync("Deposit", TransactionType.Income, TransactionScope.Wallet);
             await EnsureCategoryAsync("PayBooking", TransactionType.Expense, TransactionScope.Wallet);
@@ -82,8 +127,12 @@ namespace PCM.Infrastructure.Services
             await EnsureTreasuryTransactionsAsync(adminMember, categoryMap);
             await EnsureWalletTransactionsAsync(member1, categoryMap, includePending: false);
             await EnsureWalletTransactionsAsync(member2, categoryMap, includePending: true);
-            await EnsureBookingsAsync(new[] { member1, member2 });
-            await EnsureTournamentsAsync(adminMember, new[] { member1, member2 });
+            foreach (var member in members)
+            {
+                await EnsureMinimumWalletBalanceAsync(member, categoryMap, 1000000m);
+            }
+            await EnsureBookingsAsync(members);
+            await EnsureTournamentsAsync(adminMember, members);
             await EnsureNewsAsync(adminMember);
         }
 
@@ -169,9 +218,9 @@ namespace PCM.Infrastructure.Services
 
             var courts = new[]
             {
-                new Court { Name = "Court 1", Description = "Sân tiêu chuẩn", HourlyRate = 100000m, IsActive = true },
-                new Court { Name = "Court 2", Description = "Sân có mái che", HourlyRate = 120000m, IsActive = true },
-                new Court { Name = "Court 3", Description = "Sân premium", HourlyRate = 150000m, IsActive = true }
+                new Court { Name = "Sân 1", Description = "Sân tiêu chuẩn", HourlyRate = 100000m, IsActive = true },
+                new Court { Name = "Sân 2", Description = "Sân có mái che", HourlyRate = 120000m, IsActive = true },
+                new Court { Name = "Sân 3", Description = "Sân premium", HourlyRate = 150000m, IsActive = true }
             };
 
             await _unitOfWork.Courts.AddRangeAsync(courts);
@@ -234,7 +283,20 @@ namespace PCM.Infrastructure.Services
         {
             var existing = await _unitOfWork.WalletTransactions.FindAsync(t => t.MemberId == member.Id);
             if (existing.Any())
+            {
+                var currentBalance = existing
+                    .Where(t => t.Status == WalletTransactionStatus.Success)
+                    .Sum(t => t.Amount);
+
+                if (member.WalletBalance != currentBalance)
+                {
+                    member.WalletBalance = currentBalance;
+                    _unitOfWork.Members.Update(member);
+                    await _unitOfWork.SaveChangesAsync();
+                }
+
                 return;
+            }
 
             if (!categoryMap.TryGetValue("Deposit", out var depositCat) ||
                 !categoryMap.TryGetValue("PayBooking", out var payCat) ||
@@ -312,6 +374,50 @@ namespace PCM.Infrastructure.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
+        private async Task EnsureMinimumWalletBalanceAsync(
+            Member member,
+            IDictionary<string, TransactionCategory> categoryMap,
+            decimal minimumBalance)
+        {
+            if (!categoryMap.TryGetValue("Deposit", out var depositCat))
+                return;
+
+            var transactions = await _unitOfWork.WalletTransactions.FindAsync(t =>
+                t.MemberId == member.Id && t.Status == WalletTransactionStatus.Success);
+
+            var balance = transactions.Sum(t => t.Amount);
+            if (balance >= minimumBalance)
+            {
+                if (member.WalletBalance != balance)
+                {
+                    member.WalletBalance = balance;
+                    _unitOfWork.Members.Update(member);
+                    await _unitOfWork.SaveChangesAsync();
+                }
+                return;
+            }
+
+            var topUp = minimumBalance - balance;
+            var transaction = new WalletTransaction
+            {
+                MemberId = member.Id,
+                Date = DateTime.UtcNow,
+                Amount = topUp,
+                CategoryId = depositCat.Id,
+                Type = WalletTransactionType.Deposit,
+                ReferenceId = $"SEED-TOPUP-{member.Id}",
+                Description = "Nạp ví bổ sung cho demo",
+                Status = WalletTransactionStatus.Success
+            };
+            transaction.EncryptedSignature = ComputeSignature(transaction);
+
+            await _unitOfWork.WalletTransactions.AddAsync(transaction);
+
+            member.WalletBalance = balance + topUp;
+            _unitOfWork.Members.Update(member);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
         private async Task EnsureBookingsAsync(IEnumerable<Member> members)
         {
             var existing = await _unitOfWork.Bookings.GetAllAsync();
@@ -369,44 +475,115 @@ namespace PCM.Infrastructure.Services
 
         private async Task EnsureTournamentsAsync(Member adminMember, IEnumerable<Member> members)
         {
-            var existing = await _unitOfWork.Tournaments.GetAllAsync();
-            if (existing.Any())
-                return;
+            var existing = (await _unitOfWork.Tournaments.GetAllAsync()).ToList();
 
-            var tournament = new Tournament
+            var knockout = existing.FirstOrDefault(t => t.Name == "PCM Knockout Cup");
+            if (knockout == null)
             {
-                Name = "PCM Knockout Cup",
-                Description = "Giải đấu loại trực tiếp",
-                StartDate = DateTime.UtcNow.AddDays(7),
-                EndDate = DateTime.UtcNow.AddDays(14),
-                Type = TournamentType.Professional,
-                Format = TournamentFormat.Knockout,
-                Status = TournamentStatus.Open,
-                EntryFee = 100000m,
-                PrizePool = 1000000m,
-                MaxParticipants = 8,
-                RegistrationDeadline = DateTime.UtcNow.AddDays(5),
-                CreatedBy = adminMember.UserId,
-                CreatedDate = DateTime.UtcNow
-            };
-
-            await _unitOfWork.Tournaments.AddAsync(tournament);
-            await _unitOfWork.SaveChangesAsync();
-
-            foreach (var member in members)
-            {
-                var participant = new Participant
+                knockout = new Tournament
                 {
-                    TournamentId = tournament.Id,
-                    MemberId = member.Id,
-                    TeamName = member.FullName,
-                    Status = ParticipantStatus.Paid,
-                    RegisteredDate = DateTime.UtcNow
+                    Name = "PCM Knockout Cup",
+                    Description = "Giải đấu loại trực tiếp",
+                    StartDate = DateTime.UtcNow.AddDays(7),
+                    EndDate = DateTime.UtcNow.AddDays(14),
+                    Type = TournamentType.Professional,
+                    Format = TournamentFormat.Knockout,
+                    Status = TournamentStatus.Open,
+                    EntryFee = 100000m,
+                    PrizePool = 1000000m,
+                    MaxParticipants = 8,
+                    RegistrationDeadline = DateTime.UtcNow.AddDays(5),
+                    CreatedBy = adminMember.UserId,
+                    CreatedDate = DateTime.UtcNow
                 };
-                await _unitOfWork.Participants.AddAsync(participant);
+
+                await _unitOfWork.Tournaments.AddAsync(knockout);
+                await _unitOfWork.SaveChangesAsync();
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            var openTournament = existing.FirstOrDefault(t => t.Name == "PCM Open Series");
+            if (openTournament == null)
+            {
+                openTournament = new Tournament
+                {
+                    Name = "PCM Open Series",
+                    Description = "Giải đấu mở cho thành viên đăng ký mới",
+                    StartDate = DateTime.UtcNow.AddDays(3),
+                    EndDate = DateTime.UtcNow.AddDays(10),
+                    Type = TournamentType.MiniGame,
+                    Format = TournamentFormat.RoundRobin,
+                    Status = TournamentStatus.Open,
+                    EntryFee = 50000m,
+                    PrizePool = 0m,
+                    MaxParticipants = 16,
+                    RegistrationDeadline = DateTime.UtcNow.AddDays(2),
+                    CreatedBy = adminMember.UserId,
+                    CreatedDate = DateTime.UtcNow
+                };
+
+                await _unitOfWork.Tournaments.AddAsync(openTournament);
+                await _unitOfWork.SaveChangesAsync();
+            }
+            else
+            {
+                var now = DateTime.UtcNow;
+                var updated = false;
+
+                if (openTournament.RegistrationDeadline.HasValue &&
+                    openTournament.RegistrationDeadline.Value < now.AddDays(1))
+                {
+                    openTournament.RegistrationDeadline = now.AddDays(2);
+                    updated = true;
+                }
+
+                if (openTournament.StartDate < now.AddDays(1))
+                {
+                    openTournament.StartDate = now.AddDays(3);
+                    updated = true;
+                }
+
+                if (openTournament.EndDate <= openTournament.StartDate)
+                {
+                    openTournament.EndDate = openTournament.StartDate.AddDays(7);
+                    updated = true;
+                }
+
+                if (openTournament.Status != TournamentStatus.Open)
+                {
+                    openTournament.Status = TournamentStatus.Open;
+                    updated = true;
+                }
+
+                if (updated)
+                {
+                    _unitOfWork.Tournaments.Update(openTournament);
+                    await _unitOfWork.SaveChangesAsync();
+                }
+            }
+
+            if (knockout != null)
+            {
+                var participants = (await _unitOfWork.Participants.FindAsync(p => p.TournamentId == knockout.Id)).ToList();
+                if (!participants.Any())
+                {
+                    foreach (var member in members.Take(knockout.MaxParticipants > 0 ? knockout.MaxParticipants : 8))
+                    {
+                        var participant = new Participant
+                        {
+                            TournamentId = knockout.Id,
+                            MemberId = member.Id,
+                            TeamName = member.FullName,
+                            Status = ParticipantStatus.Paid,
+                            RegisteredDate = DateTime.UtcNow
+                        };
+                        await _unitOfWork.Participants.AddAsync(participant);
+                    }
+
+                    await _unitOfWork.SaveChangesAsync();
+                }
+
+                await _tournamentService.GenerateBracketAsync(knockout.Id);
+            }
         }
 
         private async Task EnsureNewsAsync(Member adminMember)

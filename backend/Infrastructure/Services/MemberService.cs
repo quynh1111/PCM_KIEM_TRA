@@ -33,6 +33,12 @@ namespace PCM.Infrastructure.Services
             return member == null ? null : ToDto(member);
         }
 
+        public async Task<List<MemberDto>> GetAllAsync()
+        {
+            var members = await _unitOfWork.Members.GetAllAsync();
+            return members.OrderBy(m => m.FullName).Select(ToDto).ToList();
+        }
+
         public async Task<MemberDto?> UpdateProfileAsync(string userId, UpdateMemberProfileDto dto)
         {
             var member = (await _unitOfWork.Members.FindAsync(m => m.UserId == userId)).FirstOrDefault();
@@ -41,6 +47,20 @@ namespace PCM.Infrastructure.Services
             if (dto.PhoneNumber != null) member.PhoneNumber = dto.PhoneNumber;
             if (dto.DateOfBirth.HasValue) member.DateOfBirth = dto.DateOfBirth;
             if (dto.AvatarUrl != null) member.AvatarUrl = dto.AvatarUrl;
+            await _unitOfWork.SaveChangesAsync();
+            return ToDto(member);
+        }
+
+        public async Task<MemberDto?> UpdateMemberAsync(int id, UpdateMemberProfileDto dto)
+        {
+            var member = await _unitOfWork.Members.GetByIdAsync(id);
+            if (member == null) return null;
+
+            if (dto.FullName != null) member.FullName = dto.FullName;
+            if (dto.PhoneNumber != null) member.PhoneNumber = dto.PhoneNumber;
+            if (dto.DateOfBirth.HasValue) member.DateOfBirth = dto.DateOfBirth;
+            if (dto.AvatarUrl != null) member.AvatarUrl = dto.AvatarUrl;
+
             await _unitOfWork.SaveChangesAsync();
             return ToDto(member);
         }

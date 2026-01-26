@@ -1,7 +1,7 @@
 <template>
   <div class="grid">
     <section class="hero reveal">
-      <span class="tag">Realtime Overview</span>
+      <span class="tag">Tổng quan thời gian thực</span>
       <h1>Xin chào {{ displayName }}</h1>
       <p>Quản lý lịch đặt sân, ví điện tử và ranking ELO ngay tại đây.</p>
       <div class="grid grid-3">
@@ -24,10 +24,10 @@
 
     <section class="grid grid-2">
       <div class="card reveal">
-        <div class="card-title">Top Ranking</div>
+        <div class="card-title">Top xếp hạng</div>
         <ol>
           <li v-for="(m, idx) in top" :key="m.id">
-            #{{ idx + 1 }} {{ m.fullName }} — {{ m.rankELO ?? m.rankLevel }}
+            #{{ idx + 1 }} {{ m.fullName }} - {{ m.rankELO ?? m.rankLevel }}
           </li>
         </ol>
       </div>
@@ -43,7 +43,7 @@
             <div class="stat-value">Redis</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Background Jobs</div>
+            <div class="stat-label">Job nền</div>
             <div class="stat-value">Hangfire</div>
           </div>
         </div>

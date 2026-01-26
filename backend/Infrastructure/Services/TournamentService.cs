@@ -13,10 +13,12 @@ namespace PCM.Infrastructure.Services
     public class TournamentService : ITournamentService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IWalletService _walletService;
 
-        public TournamentService(IUnitOfWork unitOfWork)
+        public TournamentService(IUnitOfWork unitOfWork, IWalletService walletService)
         {
             _unitOfWork = unitOfWork;
+            _walletService = walletService;
         }
 
         public async Task<List<TournamentDto>> GetAllTournamentsAsync()
@@ -96,36 +98,48 @@ namespace PCM.Infrastructure.Services
         {
             var tournament = await _unitOfWork.Tournaments.GetByIdAsync(tournamentId);
             if (tournament == null)
-                return false;
+                throw new Exception("Không tìm thấy giải đấu");
 
             if (tournament.Status != TournamentStatus.Open)
-                return false;
+                throw new Exception("Giải đấu chưa mở đăng ký");
 
-            if (tournament.RegistrationDeadline.HasValue && tournament.RegistrationDeadline.Value < DateTime.UtcNow)
-                return false;
+            if (tournament.RegistrationDeadline.HasValue)
+            {
+                var deadline = tournament.RegistrationDeadline.Value;
+                if (deadline.TimeOfDay == TimeSpan.Zero)
+                {
+                    deadline = deadline.Date.AddDays(1).AddTicks(-1);
+                }
+
+                if (deadline < DateTime.UtcNow)
+                    throw new Exception("Đã hết hạn đăng ký");
+            }
 
             var member = await _unitOfWork.Members.FirstOrDefaultAsync(m => m.UserId == userId);
             if (member == null)
-                return false;
+                throw new Exception("Không tìm thấy hội viên");
 
             var existing = (await _unitOfWork.Participants.FindAsync(p =>
                 p.TournamentId == tournamentId && p.MemberId == member.Id)).FirstOrDefault();
             if (existing != null)
-                return false;
+                throw new Exception("Bạn đã đăng ký giải này");
 
             var currentCount = (await _unitOfWork.Participants.FindAsync(p => p.TournamentId == tournamentId)).Count();
             if (tournament.MaxParticipants > 0 && currentCount >= tournament.MaxParticipants)
-                return false;
+                throw new Exception("Giải đấu đã đủ người tham gia");
 
             await _unitOfWork.BeginTransactionAsync();
             try
             {
                 if (tournament.EntryFee > 0)
                 {
+                    var balance = await _walletService.GetBalanceAsync(userId);
+                    member.WalletBalance = balance;
+
                     if (member.WalletBalance < tournament.EntryFee)
                     {
                         await _unitOfWork.RollbackTransactionAsync();
-                        return false;
+                        throw new Exception("Số dư ví không đủ");
                     }
 
                     var category = await EnsureWalletCategoryAsync("PayTournament", TransactionType.Expense, TransactionScope.Wallet);
@@ -175,6 +189,8 @@ namespace PCM.Infrastructure.Services
                 return null;
 
             var tournamentMatches = (await _unitOfWork.TournamentMatches.FindAsync(tm => tm.TournamentId == tournamentId)).ToList();
+            if (tournamentMatches.Count == 0)
+                return null;
             var matches = (await _unitOfWork.Matches.FindAsync(m => m.TournamentId == tournamentId)).ToDictionary(m => m.Id);
             var members = (await _unitOfWork.Members.GetAllAsync()).ToDictionary(m => m.Id, m => m.FullName);
 

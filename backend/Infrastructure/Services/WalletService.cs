@@ -24,11 +24,11 @@ namespace PCM.Infrastructure.Services
         public async Task<WalletTransactionDto> CreateDepositRequestAsync(string userId, WalletDepositRequestDto dto)
         {
             if (dto.Amount <= 0)
-                throw new Exception("Deposit amount must be greater than 0");
+                throw new Exception("Số tiền nạp phải lớn hơn 0");
 
             var member = await _unitOfWork.Members.FirstOrDefaultAsync(m => m.UserId == userId);
             if (member == null)
-                throw new Exception("Member not found");
+                throw new Exception("Không tìm thấy hội viên");
 
             var category = await GetOrCreateCategoryAsync("Deposit", TransactionType.Income, TransactionScope.Wallet);
 
@@ -59,16 +59,18 @@ namespace PCM.Infrastructure.Services
             {
                 var transaction = await _unitOfWork.WalletTransactions.GetByIdAsync(transactionId);
                 if (transaction == null)
-                    throw new Exception("Transaction not found");
+                    throw new Exception("Không tìm thấy giao dịch");
 
                 if (transaction.Status != WalletTransactionStatus.Pending)
-                    throw new Exception("Transaction already processed");
+                    throw new Exception("Giao dịch đã được xử lý");
                 if (transaction.Type != WalletTransactionType.Deposit)
-                    throw new Exception("Only deposit transactions can be approved");
+                    throw new Exception("Chỉ có thể duyệt giao dịch nạp tiền");
 
                 var member = await _unitOfWork.Members.GetByIdAsync(transaction.MemberId);
                 if (member == null)
-                    throw new Exception("Member not found");
+                    throw new Exception("Không tìm thấy hội viên");
+
+                await SyncMemberBalanceAsync(member, saveChanges: false);
 
                 var category = await _unitOfWork.TransactionCategories.FirstOrDefaultAsync(c => c.Id == transaction.CategoryId)
                                ?? await GetOrCreateCategoryAsync("Deposit", TransactionType.Income, TransactionScope.Wallet);
@@ -134,7 +136,7 @@ namespace PCM.Infrastructure.Services
         {
             var member = await _unitOfWork.Members.FirstOrDefaultAsync(m => m.UserId == userId);
             if (member == null)
-                throw new Exception("Member not found");
+                throw new Exception("Không tìm thấy hội viên");
 
             var transactions = await _unitOfWork.WalletTransactions.FindAsync(t => t.MemberId == member.Id);
             var categories = await _unitOfWork.TransactionCategories.GetAllAsync();
@@ -154,9 +156,9 @@ namespace PCM.Infrastructure.Services
         {
             var member = await _unitOfWork.Members.FirstOrDefaultAsync(m => m.UserId == userId);
             if (member == null)
-                throw new Exception("Member not found");
+                throw new Exception("Không tìm thấy hội viên");
 
-            return member.WalletBalance;
+            return await SyncMemberBalanceAsync(member, saveChanges: true);
         }
 
         public async Task<bool> DeductBalanceAsync(int memberId, decimal amount, string referenceId, string description)
@@ -173,6 +175,8 @@ namespace PCM.Infrastructure.Services
                     await _unitOfWork.RollbackTransactionAsync();
                     return false;
                 }
+
+                await SyncMemberBalanceAsync(member, saveChanges: false);
 
                 if (member.WalletBalance < amount)
                 {
@@ -227,6 +231,7 @@ namespace PCM.Infrastructure.Services
 
                 var category = await GetOrCreateCategoryAsync("Refund", TransactionType.Income, TransactionScope.Wallet);
 
+                await SyncMemberBalanceAsync(member, saveChanges: false);
                 member.WalletBalance += amount;
 
                 var transaction = new WalletTransaction
@@ -279,6 +284,25 @@ namespace PCM.Infrastructure.Services
             await _unitOfWork.SaveChangesAsync();
 
             return category;
+        }
+
+        private async Task<decimal> SyncMemberBalanceAsync(Member member, bool saveChanges)
+        {
+            var transactions = await _unitOfWork.WalletTransactions.FindAsync(t =>
+                t.MemberId == member.Id && t.Status == WalletTransactionStatus.Success);
+
+            var balance = transactions.Sum(t => t.Amount);
+            if (member.WalletBalance != balance)
+            {
+                member.WalletBalance = balance;
+                _unitOfWork.Members.Update(member);
+                if (saveChanges)
+                {
+                    await _unitOfWork.SaveChangesAsync();
+                }
+            }
+
+            return member.WalletBalance;
         }
 
         private static WalletTransactionDto MapToDto(WalletTransaction transaction, Member member, TransactionCategory? category)

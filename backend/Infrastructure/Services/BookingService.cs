@@ -63,11 +63,17 @@ namespace PCM.Infrastructure.Services
         {
             var member = await _unitOfWork.Members.FirstOrDefaultAsync(m => m.UserId == userId);
             if (member == null)
-                throw new Exception("Member not found");
+                throw new Exception("Không tìm thấy hội viên");
 
             var court = await _unitOfWork.Courts.GetByIdAsync(dto.CourtId);
             if (court == null || !court.IsActive)
-                throw new Exception("Court not found or inactive");
+                throw new Exception("Không tìm thấy sân hoặc sân đang ngưng hoạt động");
+
+            if (dto.EndTime <= dto.StartTime)
+                throw new Exception("Giờ kết thúc phải sau giờ bắt đầu");
+
+            if (dto.StartTime < DateTime.Now)
+                throw new Exception("Giờ bắt đầu phải ở tương lai");
 
             // CRITICAL: Start transaction for concurrency control
             await _unitOfWork.BeginTransactionAsync();
@@ -77,7 +83,7 @@ namespace PCM.Infrastructure.Services
                 // Check for conflicts using database lock
                 var hasConflict = await CheckTimeConflictAsync(dto.CourtId, dto.StartTime, dto.EndTime);
                 if (hasConflict)
-                    throw new Exception("Time slot is already booked");
+                    throw new Exception("Khung giờ đã có người đặt");
 
                 // Calculate price
                 var hours = (decimal)(dto.EndTime - dto.StartTime).TotalHours;
@@ -91,7 +97,7 @@ namespace PCM.Infrastructure.Services
                     $"Thanh toán đặt sân {court.Name} - {dto.StartTime:dd/MM/yyyy HH:mm}");
 
                 if (!deducted)
-                    throw new Exception("Insufficient wallet balance");
+                    throw new Exception("Số dư ví không đủ");
 
                 // Create booking
                 var booking = new Booking
@@ -117,7 +123,7 @@ namespace PCM.Infrastructure.Services
             catch (DbUpdateConcurrencyException)
             {
                 await _unitOfWork.RollbackTransactionAsync();
-                throw new Exception("Booking conflict detected. Please try again.");
+                throw new Exception("Xung đột đặt sân, vui lòng thử lại.");
             }
             catch
             {
@@ -130,14 +136,24 @@ namespace PCM.Infrastructure.Services
         {
             var member = await _unitOfWork.Members.FirstOrDefaultAsync(m => m.UserId == userId);
             if (member == null)
-                throw new Exception("Member not found");
+                throw new Exception("Không tìm thấy hội viên");
 
             var court = await _unitOfWork.Courts.GetByIdAsync(dto.CourtId);
             if (court == null || !court.IsActive)
-                throw new Exception("Court not found or inactive");
+                throw new Exception("Không tìm thấy sân hoặc sân đang ngưng hoạt động");
+
+            if (dto.StartDate.Date > dto.EndDate.Date)
+                throw new Exception("Ngày bắt đầu phải trước ngày kết thúc");
+
+            if (dto.EndTime <= dto.StartTime)
+                throw new Exception("Giờ kết thúc phải sau giờ bắt đầu");
+
+            if (dto.DaysOfWeek == null || dto.DaysOfWeek.Count == 0)
+                throw new Exception("Vui lòng chọn thứ trong tuần");
 
             var result = new RecurringBookingResultDto();
             var recurringGroupId = Guid.NewGuid().ToString();
+            var remainingBalance = await _walletService.GetBalanceAsync(userId);
 
             // Generate all dates
             var dates = GenerateRecurringDates(dto.StartDate, dto.EndDate, dto.DaysOfWeek);
@@ -150,6 +166,17 @@ namespace PCM.Infrastructure.Services
                     var startDateTime = date.Add(dto.StartTime);
                     var endDateTime = date.Add(dto.EndTime);
 
+                    if (startDateTime < DateTime.Now)
+                    {
+                        result.Conflicts.Add(new ConflictDto
+                        {
+                            Date = date,
+                            Reason = "Giờ bắt đầu phải ở tương lai"
+                        });
+                        result.TotalFailed++;
+                        continue;
+                    }
+
                     // Check conflict
                     var hasConflict = await CheckTimeConflictAsync(dto.CourtId, startDateTime, endDateTime);
                     if (hasConflict)
@@ -157,7 +184,7 @@ namespace PCM.Infrastructure.Services
                         result.Conflicts.Add(new ConflictDto
                         {
                             Date = date,
-                            Reason = "Time slot already booked"
+                            Reason = "Khung giờ đã có người đặt"
                         });
                         result.TotalFailed++;
                         continue;
@@ -168,12 +195,12 @@ namespace PCM.Infrastructure.Services
                     var totalPrice = hours * court.HourlyRate;
 
                     // Check balance
-                    if (member.WalletBalance < totalPrice)
+                    if (remainingBalance < totalPrice)
                     {
                         result.Conflicts.Add(new ConflictDto
                         {
                             Date = date,
-                            Reason = "Insufficient balance"
+                            Reason = "Số dư ví không đủ"
                         });
                         result.TotalFailed++;
                         continue;
@@ -201,6 +228,7 @@ namespace PCM.Infrastructure.Services
 
                     result.SuccessfulBookings.Add(booking);
                     result.TotalSuccess++;
+                    remainingBalance -= totalPrice;
                 }
                 catch (Exception ex)
                 {
@@ -220,24 +248,24 @@ namespace PCM.Infrastructure.Services
         {
             var member = await _unitOfWork.Members.FirstOrDefaultAsync(m => m.UserId == userId);
             if (member == null)
-                throw new Exception("Member not found");
+                throw new Exception("Không tìm thấy hội viên");
 
             var booking = await _unitOfWork.Bookings.GetByIdAsync(bookingId);
             if (booking == null)
-                throw new Exception("Booking not found");
+                throw new Exception("Không tìm thấy booking");
 
             if (booking.MemberId != member.Id)
-                throw new Exception("Unauthorized");
+                throw new Exception("Không có quyền thao tác booking này");
 
             if (booking.Status == BookingStatus.Cancelled)
-                throw new Exception("Booking already cancelled");
+                throw new Exception("Booking đã được hủy");
 
             await _unitOfWork.BeginTransactionAsync();
 
             try
             {
                 // Calculate refund (100% if > 24h before, 50% if > 6h, 0% otherwise)
-                var hoursUntilBooking = (booking.StartTime - DateTime.UtcNow).TotalHours;
+                var hoursUntilBooking = (booking.StartTime - DateTime.Now).TotalHours;
                 var refundRate = hoursUntilBooking > 24 ? 1.0m :
                                 hoursUntilBooking > 6 ? 0.5m : 0m;
 
@@ -274,7 +302,7 @@ namespace PCM.Infrastructure.Services
         {
             var member = await _unitOfWork.Members.FirstOrDefaultAsync(m => m.UserId == userId);
             if (member == null)
-                throw new Exception("Member not found");
+                throw new Exception("Không tìm thấy hội viên");
 
             var bookings = await _unitOfWork.Bookings
                 .FindAsync(b => b.MemberId == member.Id);

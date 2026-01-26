@@ -1,3 +1,4 @@
+using System;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
@@ -70,8 +71,15 @@ namespace PCM.API.Controllers.Compatibility
             if (string.IsNullOrWhiteSpace(userId))
                 return Unauthorized();
 
-            var ok = await _tournamentService.JoinTournamentAsync(id, userId, null);
-            return Ok(new { id, joined = ok });
+            try
+            {
+                var ok = await _tournamentService.JoinTournamentAsync(id, userId, null);
+                return Ok(new { id, joined = ok });
+            }
+            catch (Exception ex)
+            {
+                return MapChallengeError(ex);
+            }
         }
 
         [HttpPost("{id:int}/auto-divide-teams")]
@@ -79,8 +87,35 @@ namespace PCM.API.Controllers.Compatibility
         public async Task<IActionResult> AutoDivideTeams(int id, CancellationToken ct)
         {
             // Logic: sort participants by Rank desc, assign A/B alternating.
-            var ok = await _tournamentService.AutoDivideTeamsAsync(id);
-            return Ok(new { id, status = ok ? "OK" : "NoParticipants" });
+            try
+            {
+                var ok = await _tournamentService.AutoDivideTeamsAsync(id);
+                return Ok(new { id, status = ok ? "OK" : "NoParticipants" });
+            }
+            catch (Exception ex)
+            {
+                return MapChallengeError(ex);
+            }
+        }
+
+        private IActionResult MapChallengeError(Exception ex)
+        {
+            var message = ex.Message ?? "Challenge error";
+            if (message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                return NotFound(new { message });
+
+            if (message.Contains("already", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message });
+
+            if (message.Contains("full", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("closed", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("not open", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message });
+
+            if (message.Contains("insufficient", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message });
+
+            return BadRequest(new { message });
         }
     }
 }

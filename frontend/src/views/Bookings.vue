@@ -15,8 +15,13 @@
               <input v-model="selectedDate" type="date" class="form-control" />
             </label>
             <label>
-              <span class="muted">Mã sân (tuỳ chọn)</span>
-              <input v-model.number="selectedCourtId" type="number" min="1" class="form-control" placeholder="1, 2, 3..." />
+              <span class="muted">Sân (tùy chọn)</span>
+              <select v-model="selectedCourtId" class="form-control">
+                <option value="">Tất cả sân</option>
+                <option v-for="court in courts" :key="court.id" :value="court.id">
+                  {{ court.name }}
+                </option>
+              </select>
             </label>
             <button class="btn btn-primary" @click="loadSlots">Xem slot trống</button>
           </div>
@@ -59,7 +64,11 @@
           <div class="form-grid">
             <label>
               <span class="muted">Sân</span>
-              <input v-model.number="recurring.courtId" type="number" min="1" class="form-control" />
+              <select v-model.number="recurring.courtId" class="form-control">
+                <option v-for="court in courts" :key="court.id" :value="court.id">
+                  {{ court.name }}
+                </option>
+              </select>
             </label>
             <label>
               <span class="muted">Từ ngày</span>
@@ -86,15 +95,25 @@
                 </label>
               </div>
             </div>
-            <button class="btn btn-primary" @click="createRecurring" :disabled="recurringLoading">Tạo lịch định kỳ</button>
+            <button class="btn btn-primary" @click="createRecurring" :disabled="recurringLoading">
+              Tạo lịch định kỳ
+            </button>
           </div>
           <div v-if="recurringResult" class="alert">
             Thành công: {{ recurringResult.totalSuccess }} / {{ recurringResult.totalAttempted }}. Lỗi: {{ recurringResult.totalFailed }}.
           </div>
+          <div v-if="recurringResult?.conflicts?.length" class="card">
+            <div class="card-title">Ngày bị trùng / thất bại</div>
+            <ul>
+              <li v-for="c in recurringResult.conflicts" :key="c.date">
+                {{ formatDate(c.date) }} - {{ c.reason }}
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div class="card">
-          <div class="card-title">Lịch của tôi</div>
+        <div class="card-title">Lịch của tôi</div>
           <table class="table">
             <thead>
               <tr>
@@ -107,10 +126,16 @@
             <tbody>
               <tr v-for="b in myBookings" :key="b.id">
                 <td>{{ b.courtName }}</td>
-                <td>{{ formatTime(b.startTime) }} - {{ formatTime(b.endTime) }}</td>
-                <td><span class="badge">{{ b.status }}</span></td>
+                <td>{{ formatDateTime(b.startTime) }} - {{ formatTime(b.endTime) }}</td>
+                <td><span class="badge">{{ formatStatus(b.status) }}</span></td>
                 <td>
-                  <button class="btn btn-ghost" @click="cancelBooking(b.id)" :disabled="bookingLoading">Huỷ</button>
+                  <button
+                    class="btn btn-ghost"
+                    @click="cancelBooking(b.id)"
+                    :disabled="bookingLoading || !canCancel(b)"
+                  >
+                    Hủy
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -124,18 +149,22 @@
 <script setup>
 import { onMounted, ref } from "vue";
 import { bookingsApi } from "@/api/bookings";
+import { courtsApi } from "@/api/courts";
+import { useNotificationsStore } from "@/stores/notifications";
 
 const selectedDate = ref(new Date().toISOString().slice(0, 10));
-const selectedCourtId = ref(null);
+const selectedCourtId = ref("");
+const courts = ref([]);
 const slots = ref([]);
 const myBookings = ref([]);
 const bookingLoading = ref(false);
 const bookingError = ref("");
 const recurringLoading = ref(false);
 const recurringResult = ref(null);
+const notifications = useNotificationsStore();
 
 const recurring = ref({
-  courtId: 1,
+  courtId: 0,
   startDate: new Date().toISOString().slice(0, 10),
   endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
   startTime: "17:00",
@@ -158,25 +187,56 @@ const formatTime = (value) => {
   if (!value) return "--";
   return new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 };
+const formatDate = (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "--");
+const formatDateTime = (value) =>
+  value ? new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "--";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(value || 0);
 
+const formatStatus = (status) =>
+  ({
+    Confirmed: "Đã xác nhận",
+    PendingPayment: "Chờ thanh toán",
+    Cancelled: "Đã hủy",
+    CheckedIn: "Đã check-in",
+  }[status] || status);
+
+const loadCourts = async () => {
+  try {
+    courts.value = await courtsApi.list();
+    if (!selectedCourtId.value && courts.value.length) {
+      selectedCourtId.value = "";
+    }
+    if (!recurring.value.courtId && courts.value.length) {
+      recurring.value.courtId = courts.value[0].id;
+    }
+  } catch (err) {
+    notifications.push("Không tải được danh sách sân.", "error");
+  }
+};
+
 const loadSlots = async () => {
   bookingError.value = "";
   try {
-    slots.value = await bookingsApi.slots(selectedDate.value, selectedCourtId.value || undefined);
+    const courtId = selectedCourtId.value ? Number(selectedCourtId.value) : undefined;
+    slots.value = await bookingsApi.slots(selectedDate.value, courtId);
   } catch (err) {
     bookingError.value = "Không tải được slot trống.";
+    notifications.push(bookingError.value, "error");
   }
 };
 
 const loadMyBookings = async () => {
   bookingError.value = "";
   try {
-    myBookings.value = await bookingsApi.myBookings();
+    const data = await bookingsApi.myBookings();
+    myBookings.value = data.sort(
+      (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    );
   } catch (err) {
     bookingError.value = "Không tải được danh sách booking.";
+    notifications.push(bookingError.value, "error");
   }
 };
 
@@ -190,10 +250,15 @@ const bookSlot = async (courtId, slot) => {
       endTime: slot.endTime,
       note: "Đặt sân từ giao diện PCM",
     });
+    notifications.push(
+      `Đặt sân thành công ${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`,
+      "success"
+    );
     await loadSlots();
     await loadMyBookings();
   } catch (err) {
     bookingError.value = err?.response?.data?.message || "Đặt sân thất bại.";
+    notifications.push(bookingError.value, "error");
   } finally {
     bookingLoading.value = false;
   }
@@ -204,10 +269,12 @@ const cancelBooking = async (id) => {
   bookingError.value = "";
   try {
     await bookingsApi.cancel(id);
+    notifications.push("Hủy booking thành công.", "success");
     await loadMyBookings();
     await loadSlots();
   } catch (err) {
-    bookingError.value = err?.response?.data?.message || "Huỷ booking thất bại.";
+    bookingError.value = err?.response?.data?.message || "Hủy booking thất bại.";
+    notifications.push(bookingError.value, "error");
   } finally {
     bookingLoading.value = false;
   }
@@ -223,20 +290,38 @@ const createRecurring = async () => {
       endDate: recurring.value.endDate,
       startTime: `${recurring.value.startTime}:00`,
       endTime: `${recurring.value.endTime}:00`,
-      daysOfWeek: recurring.value.days,
+      daysOfWeek: recurring.value.days.map((day) => Number(day)),
       note: "Đặt lịch định kỳ",
     };
     recurringResult.value = await bookingsApi.createRecurring(payload);
+    if (recurringResult.value.totalSuccess > 0) {
+      notifications.push(
+        `Tạo lịch định kỳ thành công ${recurringResult.value.totalSuccess} buổi.`,
+        "success"
+      );
+    }
+    if (recurringResult.value.totalFailed > 0) {
+      notifications.push(
+        `Có ${recurringResult.value.totalFailed} ngày bị trùng hoặc lỗi.`,
+        "warning"
+      );
+    }
     await loadMyBookings();
     await loadSlots();
   } catch (err) {
     bookingError.value = err?.response?.data?.message || "Tạo lịch định kỳ thất bại.";
+    notifications.push(bookingError.value, "error");
   } finally {
     recurringLoading.value = false;
   }
 };
 
+const canCancel = (booking) => {
+  return booking.status === "Confirmed" || booking.status === "PendingPayment";
+};
+
 onMounted(async () => {
+  await loadCourts();
   await loadSlots();
   await loadMyBookings();
 });

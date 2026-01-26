@@ -9,7 +9,7 @@
       <div class="card-title">Top vận động viên</div>
       <ol>
         <li v-for="(m, idx) in leaderboard" :key="m.id">
-          #{{ idx + 1 }} {{ m.fullName }} — {{ m.rankELO }}
+          #{{ idx + 1 }} {{ m.fullName }} - {{ m.rankELO }}
         </li>
       </ol>
     </section>

@@ -121,14 +121,18 @@ namespace PCM.API.Controllers
         private IActionResult MapBookingError(Exception ex)
         {
             var message = ex.Message ?? "Booking error";
-            if (message.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase))
+            if (message.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("không có quyền", StringComparison.OrdinalIgnoreCase))
                 return Forbid();
 
-            if (message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            if (message.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("không tìm thấy", StringComparison.OrdinalIgnoreCase))
                 return NotFound(new { message });
 
             if (message.Contains("already booked", StringComparison.OrdinalIgnoreCase) ||
-                message.Contains("conflict", StringComparison.OrdinalIgnoreCase))
+                message.Contains("conflict", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("xung đột", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("đã có người đặt", StringComparison.OrdinalIgnoreCase))
                 return Conflict(new { message });
 
             return BadRequest(new { message });

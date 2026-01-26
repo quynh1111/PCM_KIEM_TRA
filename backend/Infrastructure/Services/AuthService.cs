@@ -31,9 +31,9 @@ namespace PCM.Infrastructure.Services
         public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
         {
             var user = await _userManager.FindByEmailAsync(dto.Email);
-            if (user == null) throw new Exception("Invalid credentials");
+            if (user == null) throw new Exception("Sai email hoặc mật khẩu");
             var ok = await _userManager.CheckPasswordAsync(user, dto.Password);
-            if (!ok) throw new Exception("Invalid credentials");
+            if (!ok) throw new Exception("Sai email hoặc mật khẩu");
             return await GenerateTokensAsync(user);
         }
 
@@ -71,14 +71,14 @@ namespace PCM.Infrastructure.Services
 
             var stored = (await _unitOfWork.RefreshTokens.FindAsync(rt => rt.Token == dto.RefreshToken)).FirstOrDefault();
             if (stored == null || stored.IsRevoked || stored.IsUsed || stored.ExpiryDate < DateTime.UtcNow)
-                throw new Exception("Invalid refresh token");
+                throw new Exception("Refresh token không hợp lệ");
 
             // mark used
             stored.IsUsed = true;
             await _unitOfWork.SaveChangesAsync();
 
             var user = await _userManager.FindByIdAsync(stored.UserId);
-            if (user == null) throw new Exception("User not found");
+            if (user == null) throw new Exception("Không tìm thấy tài khoản");
 
             return await GenerateTokensAsync(user);
         }

@@ -17,7 +17,10 @@ export const useAuthStore = defineStore('auth', () => {
       const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
       const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
       const decoded = JSON.parse(atob(padded))
-      const claim = decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']
+      const claim =
+        decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] ||
+        decoded.role ||
+        decoded.roles
       if (!claim) return []
       return Array.isArray(claim) ? claim : [claim]
     } catch (error) {
@@ -95,6 +98,10 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await apiClient.get('/api/members/me')
       user.value = response.data
+      const me = await apiClient.get('/api/auth/me')
+      if (me?.data?.roles) {
+        roles.value = me.data.roles
+      }
     } catch (error) {
       console.error('Fetch profile error:', error)
     }

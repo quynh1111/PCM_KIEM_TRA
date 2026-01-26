@@ -106,10 +106,12 @@ namespace PCM.API.Controllers
         private IActionResult MapWalletError(Exception ex)
         {
             var message = ex.Message ?? "Wallet error";
-            if (message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            if (message.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("không tìm thấy", StringComparison.OrdinalIgnoreCase))
                 return NotFound(new { message });
 
-            if (message.Contains("already processed", StringComparison.OrdinalIgnoreCase))
+            if (message.Contains("already processed", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("đã được xử lý", StringComparison.OrdinalIgnoreCase))
                 return Conflict(new { message });
 
             return BadRequest(new { message });
